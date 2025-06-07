@@ -1,46 +1,32 @@
-#include <WiFi.h>
+#include <WiFiManager.h>
+#include <ESPmDNS.h>
 
-// Configuración WiFi
-const char* ssid =  "MEGACABLE-2.4G-DEA7";
-const char* password = "WBCHJDP5k8";
-
-// Configuración del servidor TCP
 WiFiServer server(8080);
-const int LED_PIN = 13; // Pin D13 para el LED
-
-// Variables para debug
+const int LED_PIN = 13;
 unsigned long lastPrintTime = 0;
 
 void setup() {
   Serial.begin(115200);
-  
-  // Configurar el pin del LED
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW); // LED apagado inicialmente
-  
-  // Conectar a WiFi
-  WiFi.begin(ssid, password);
-  Serial.print("Conectando a WiFi");
-  
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  
-  Serial.println();
+  digitalWrite(LED_PIN, LOW);
+
+  WiFiManager wifiManager;
+  // wifiManager.resetSettings(); // Descomenta para borrar redes guardadas
+  wifiManager.autoConnect("GASOX"); // Nombre de la red temporal
+
   Serial.println("WiFi conectado!");
   Serial.print("Dirección IP: ");
   Serial.println(WiFi.localIP());
-  
-  // Iniciar servidor TCP
+
+  // Iniciar mDNS
+  if (MDNS.begin("esp32")) {
+    Serial.println("mDNS responder iniciado: esp32.local");
+  } else {
+    Serial.println("Error al iniciar mDNS");
+  }
+
   server.begin();
-  server.setNoDelay(true); // Disable Nagle algorithm para respuesta inmediata
-  Serial.println("Servidor TCP iniciado en puerto 8080");
-  Serial.println("Esperando conexiones...");
-  Serial.println("Puedes conectarte desde la app usando:");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
-  Serial.println("Puerto: 8080");
+  server.setNoDelay(true);
 }
 
 void loop() {
@@ -50,12 +36,11 @@ void loop() {
       Serial.println("WiFi conectado - IP: " + WiFi.localIP().toString());
       Serial.println("Servidor TCP activo - Puerto: 8080");
     } else {
-      Serial.println("WiFi desconectado - Reconectando...");
-      WiFi.begin(ssid, password);
+      Serial.println("WiFi desconectado - Esperando configuración...");
     }
     lastPrintTime = millis();
   }
-  
+
   WiFiClient client = server.available();
 
   if (client) {
@@ -79,6 +64,12 @@ void loop() {
           client.println(ledState == HIGH ? "LED_ENCENDIDO" : "LED_APAGADO");
         } else if (command == "PING") {
           client.println("PONG");
+        } else if (command == "FORGET_WIFI") {
+          client.println("OLVIDANDO_WIFI");
+          client.flush();
+          delay(100);
+          WiFi.disconnect(true, true);
+          ESP.restart();
         } else {
           client.println("COMANDO_DESCONOCIDO");
         }
